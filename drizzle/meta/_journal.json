@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1783383081396,
+      "tag": "0000_lowly_vermin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1783383576339,
+      "tag": "0001_gifted_maelstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1783388451115,
+      "tag": "0002_gigantic_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1783391736733,
+      "tag": "0003_remarkable_dreaming_celestial",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1783482022501,
+      "tag": "0004_little_firelord",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1783570000087,
+      "tag": "0005_furry_gladiator",
+      "breakpoints": true
+    }
+  ]
+}
