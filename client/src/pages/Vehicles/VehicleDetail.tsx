@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowRight, Edit, Trash2, Plus, TrendingUp, Percent, Calendar } from "lucide-react";
+import { ArrowRight, Edit, Trash2, Plus, TrendingUp, Percent, Calendar, Fuel } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -67,11 +67,12 @@ export default function VehicleDetail() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card><CardContent className="pt-6"><div className="text-sm text-muted-foreground">رقم اللوحة</div><div className="text-lg font-bold mt-1">{vehicle.plateNumber}</div></CardContent></Card>
         <Card><CardContent className="pt-6 flex items-center gap-3"><TrendingUp className="h-5 w-5 text-green-600" /><div><div className="text-sm text-muted-foreground">إجمالي الإيرادات</div><div className="text-lg font-bold mt-1 text-green-600">{(stats?.totalRevenue || 0).toLocaleString('ar-SA')} ر.س</div></div></CardContent></Card>
         <Card><CardContent className="pt-6 flex items-center gap-3"><Percent className="h-5 w-5 text-blue-600" /><div><div className="text-sm text-muted-foreground">نسبة الإشغال</div><div className="text-lg font-bold mt-1 text-blue-600">{stats?.occupancyRate || 0}%</div></div></CardContent></Card>
         <Card><CardContent className="pt-6 flex items-center gap-3"><Calendar className="h-5 w-5 text-purple-600" /><div><div className="text-sm text-muted-foreground">عدد العقود</div><div className="text-lg font-bold mt-1">{stats?.totalContracts || 0}</div></div></CardContent></Card>
+        <Card><CardContent className="pt-6 flex items-center gap-3"><Fuel className="h-5 w-5 text-amber-600" /><div><div className="text-sm text-muted-foreground">تكاليف الوقود</div><div className="text-lg font-bold mt-1 text-amber-600">{(stats?.totalFuelCost || 0).toLocaleString('ar-SA')} ر.س</div></div></CardContent></Card>
       </div>
 
       <Tabs defaultValue="info" className="w-full">

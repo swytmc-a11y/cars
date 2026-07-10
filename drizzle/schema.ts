@@ -119,6 +119,8 @@ export const vehicles = mysqlTable("vehicles", {
   year: int("year").notNull(),
   color: varchar("color", { length: 50 }),
   category: mysqlEnum("category", ["economy", "family", "luxury"]).default("economy").notNull(),
+  // Free-form office-managed labels (e.g. "أسطول الشركات", "دفع رباعي")
+  tags: json("tags"),
   currentMileage: int("currentMileage").default(0).notNull(),
   status: mysqlEnum("status", ["available", "reserved", "rented", "late", "maintenance", "in_transfer"]).default("available").notNull(),
   dailyRate: decimal("dailyRate", { precision: 10, scale: 2 }).notNull(),
@@ -214,6 +216,8 @@ export const handovers = mysqlTable("handovers", {
   contractId: int("contractId").notNull(),
   mileage: int("mileage").notNull(),
   fuelLevel: varchar("fuelLevel", { length: 50 }),
+  fuelCost: decimal("fuelCost", { precision: 10, scale: 2 }),
+  fuelLiters: decimal("fuelLiters", { precision: 8, scale: 2 }),
   photos: json("photos"),
   notes: text("notes"),
   createdBy: int("createdBy"),
@@ -230,6 +234,8 @@ export const returns = mysqlTable("returns", {
   contractId: int("contractId").notNull(),
   mileage: int("mileage").notNull(),
   fuelLevel: varchar("fuelLevel", { length: 50 }),
+  fuelCost: decimal("fuelCost", { precision: 10, scale: 2 }),
+  fuelLiters: decimal("fuelLiters", { precision: 8, scale: 2 }),
   photos: json("photos"),
   damageNotes: text("damageNotes"),
   damageAmount: decimal("damageAmount", { precision: 10, scale: 2 }).default("0"),
@@ -329,6 +335,39 @@ export const vehicleHistory = mysqlTable("vehicle_history", {
 
 export type VehicleHistory = typeof vehicleHistory.$inferSelect;
 export type InsertVehicleHistory = typeof vehicleHistory.$inferInsert;
+
+// ==================== INSPECTION FORMS (customizable) ====================
+// Office-defined inspection templates rendered during handover/return.
+// `fields` is an ordered array of { key, type, label, required?, options? }
+// where type ∈ photo | number | text | pass_fail | dropdown | date | signature.
+export const inspectionTemplates = mysqlTable("inspection_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  officeId: int("officeId").notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  context: mysqlEnum("context", ["handover", "return", "both"]).default("both").notNull(),
+  fields: json("fields").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type InspectionTemplate = typeof inspectionTemplates.$inferSelect;
+export type InsertInspectionTemplate = typeof inspectionTemplates.$inferInsert;
+
+export const inspectionSubmissions = mysqlTable("inspection_submissions", {
+  id: int("id").autoincrement().primaryKey(),
+  officeId: int("officeId").notNull(),
+  templateId: int("templateId").notNull(),
+  contractId: int("contractId").notNull(),
+  vehicleId: int("vehicleId"),
+  context: mysqlEnum("submissionContext", ["handover", "return"]).notNull(),
+  answers: json("answers").notNull(),
+  submittedBy: int("submittedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type InspectionSubmission = typeof inspectionSubmissions.$inferSelect;
+export type InsertInspectionSubmission = typeof inspectionSubmissions.$inferInsert;
 
 // ==================== VEHICLE LOCATIONS (GPS tracking) ====================
 // Provider-agnostic: `source` records where a ping came from (manual entry,

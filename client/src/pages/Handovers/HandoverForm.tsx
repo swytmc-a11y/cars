@@ -5,27 +5,57 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ClipboardCheck } from "lucide-react";
 import { useLocation, useParams } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { InspectionFieldsRenderer, type InspectionAnswers, type InspectionField } from "@/components/InspectionFields";
 
 export default function HandoverForm() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const contractId = Number(params.id);
 
-  const [form, setForm] = useState({ mileage: 0, fuelLevel: "full", notes: "" });
+  const [form, setForm] = useState({ mileage: 0, fuelLevel: "full", fuelCost: "", fuelLiters: "", notes: "" });
+
+  const { data: templates } = trpc.inspections.templates.useQuery({ context: "handover" });
+  const [templateId, setTemplateId] = useState<number | null>(null);
+  const [answers, setAnswers] = useState<InspectionAnswers>({});
+  const selectedTemplate = templates?.find(t => t.id === templateId);
+
+  useEffect(() => {
+    if (templates?.length && templateId === null) setTemplateId(templates[0].id);
+  }, [templates, templateId]);
 
   const utils = trpc.useUtils();
-  const createMutation = trpc.handovers.create.useMutation({
-    onSuccess: () => { toast.success("تم تسليم السيارة بنجاح"); utils.contracts.getById.invalidate({ id: contractId }); setLocation(`/contracts/${contractId}`); },
-    onError: (e) => toast.error(e.message),
-  });
+  const createMutation = trpc.handovers.create.useMutation();
+  const inspectionMutation = trpc.inspections.submit.useMutation();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const isPending = createMutation.isPending || inspectionMutation.isPending;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    createMutation.mutate({ contractId, ...form });
+    try {
+      // Validate required inspection fields before recording the handover so
+      // a rejected inspection doesn't leave a handover already saved.
+      if (selectedTemplate) {
+        const fields = (selectedTemplate.fields as InspectionField[]) ?? [];
+        const missing = fields.filter(f => f.required && (answers[f.key] === undefined || answers[f.key] === null || answers[f.key] === "")).map(f => f.label);
+        if (missing.length > 0) {
+          toast.error(`حقول الفحص التالية مطلوبة: ${missing.join("، ")}`);
+          return;
+        }
+      }
+      await createMutation.mutateAsync({ contractId, ...form });
+      if (selectedTemplate) {
+        await inspectionMutation.mutateAsync({ templateId: selectedTemplate.id, contractId, context: "handover", answers });
+      }
+      toast.success("تم تسليم السيارة بنجاح");
+      utils.contracts.getById.invalidate({ id: contractId });
+      setLocation(`/contracts/${contractId}`);
+    } catch (err: any) {
+      toast.error(err?.message ?? "حدث خطأ أثناء الحفظ");
+    }
   };
 
   return (
@@ -53,10 +83,40 @@ export default function HandoverForm() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2"><Label>تكلفة تعبئة الوقود (ر.س)</Label><Input type="number" min="0" step="0.01" value={form.fuelCost} onChange={e => setForm(f => ({ ...f, fuelCost: e.target.value }))} placeholder="اختياري" /></div>
+              <div className="space-y-2"><Label>كمية الوقود (لتر)</Label><Input type="number" min="0" step="0.1" value={form.fuelLiters} onChange={e => setForm(f => ({ ...f, fuelLiters: e.target.value }))} placeholder="اختياري" /></div>
             </div>
             <div className="space-y-2"><Label>ملاحظات</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="ملاحظات حول حالة السيارة عند التسليم..." /></div>
+
+            {templates && templates.length > 0 && (
+              <Card className="border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ClipboardCheck className="h-4 w-4 text-primary" /> نموذج الفحص
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {templates.length > 1 && (
+                    <Select value={templateId ? String(templateId) : ""} onValueChange={v => { setTemplateId(Number(v)); setAnswers({}); }}>
+                      <SelectTrigger><SelectValue placeholder="اختر نموذج الفحص" /></SelectTrigger>
+                      <SelectContent>
+                        {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {selectedTemplate && (
+                    <InspectionFieldsRenderer
+                      fields={(selectedTemplate.fields as InspectionField[]) ?? []}
+                      answers={answers}
+                      onChange={setAnswers}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             <div className="flex gap-3 pt-4">
-              <Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? "جاري الحفظ..." : "تأكيد التسليم"}</Button>
+              <Button type="submit" disabled={isPending}>{isPending ? "جاري الحفظ..." : "تأكيد التسليم"}</Button>
               <Button type="button" variant="outline" onClick={() => setLocation(`/contracts/${contractId}`)}>إلغاء</Button>
             </div>
           </form>

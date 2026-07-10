@@ -50,6 +50,13 @@
       "when": 1783693843939,
       "tag": "0006_nosy_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1783727298665,
+      "tag": "0007_lean_ghost_rider",
+      "breakpoints": true
     }
   ]
 }

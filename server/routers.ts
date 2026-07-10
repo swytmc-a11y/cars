@@ -4,12 +4,13 @@ import { nanoid } from "nanoid";
 import { sdk } from "./_core/sdk";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, permissionProcedure, router } from "./_core/trpc";
+import { ALL_PERMISSION_KEYS, resolvePermission } from "@shared/permissions";
 import * as db from "./db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { sendOtpEmail, sendInvitationEmail } from "./email";
-import { renderHtmlToPdf, buildContractHtml, buildReceiptHtml } from "./pdf";
+import { renderHtmlToPdf, buildContractHtml, buildReceiptHtml, buildReportHtml } from "./pdf";
 import { storagePut } from "./storage";
 
 // ==================== ROUTERS ====================
@@ -33,7 +34,7 @@ export const appRouter = router({
     getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       return db.getBranchById(input.id);
     }),
-    create: adminProcedure.input(z.object({
+    create: permissionProcedure('manage_branches').input(z.object({
       name: z.string().min(1),
       city: z.string().optional(),
       address: z.string().optional(),
@@ -45,7 +46,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'branch', entityId: id, newValue: input });
       return { id };
     }),
-    update: adminProcedure.input(z.object({
+    update: permissionProcedure('manage_branches').input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
       city: z.string().optional(),
@@ -63,15 +64,21 @@ export const appRouter = router({
 
   // ==================== VEHICLES ====================
   vehicles: router({
-    list: protectedProcedure.input(z.object({
+    list: permissionProcedure('view_vehicles').input(z.object({
       branchId: z.number().optional(),
       status: z.string().optional(),
       category: z.string().optional(),
+      tag: z.string().optional(),
     }).optional()).query(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
-      return db.getAllVehicles({ ...(input ?? {}), officeId });
+      const { tag, ...filters } = input ?? {};
+      const rows = await db.getAllVehicles({ ...filters, officeId });
+      if (!tag) return rows;
+      // Tag filtering happens here (per-office fleets are small) instead of
+      // JSON queries that differ between MySQL and MariaDB.
+      return rows.filter(v => Array.isArray(v.tags) && (v.tags as string[]).includes(tag));
     }),
-    getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    getById: permissionProcedure('view_vehicles').input(z.object({ id: z.number() })).query(async ({ input }) => {
       const vehicle = await db.getVehicleById(input.id);
       if (!vehicle) throw new TRPCError({ code: 'NOT_FOUND', message: 'السيارة غير موجودة' });
       const history = await db.getVehicleHistory(input.id);
@@ -79,7 +86,7 @@ export const appRouter = router({
       const maintenanceRecords = await db.getAllMaintenance({ vehicleId: input.id });
       return { vehicle, history, documents, maintenance: maintenanceRecords };
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_vehicles').input(z.object({
       plateNumber: z.string().min(1),
       brand: z.string().min(1),
       model: z.string().min(1),
@@ -91,14 +98,18 @@ export const appRouter = router({
       weeklyRate: z.string().optional(),
       monthlyRate: z.string().optional(),
       branchId: z.number(),
+      tags: z.array(z.string()).optional(),
     })).mutation(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
+      // Empty strings from the form would fail on decimal columns
+      if (!input.weeklyRate) delete input.weeklyRate;
+      if (!input.monthlyRate) delete input.monthlyRate;
       const id = await db.createVehicle({ ...input, officeId } as any);
       await db.addVehicleHistory({ vehicleId: id!, eventType: 'status_change', description: 'تم إضافة السيارة للنظام' });
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'vehicle', entityId: id, newValue: input });
       return { id };
     }),
-    update: protectedProcedure.input(z.object({
+    update: permissionProcedure('edit_vehicles').input(z.object({
       id: z.number(),
       plateNumber: z.string().optional(),
       brand: z.string().optional(),
@@ -113,8 +124,13 @@ export const appRouter = router({
       branchId: z.number().optional(),
       status: z.enum(['available', 'reserved', 'rented', 'late', 'maintenance', 'in_transfer']).optional(),
       isActive: z.boolean().optional(),
+      tags: z.array(z.string()).optional(),
     })).mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
+      // Empty strings from the form would fail on decimal columns
+      if (data.weeklyRate === '') delete data.weeklyRate;
+      if (data.monthlyRate === '') delete data.monthlyRate;
+      if (data.dailyRate === '') delete data.dailyRate;
       const old = await db.getVehicleById(id);
       await db.updateVehicle(id, data as any);
       if (data.status && old && data.status !== old.status) {
@@ -123,34 +139,34 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'update', entityType: 'vehicle', entityId: id, oldValue: old, newValue: data });
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+    delete: permissionProcedure('delete_vehicles').input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       await db.updateVehicle(input.id, { isActive: false });
       await db.addVehicleHistory({ vehicleId: input.id, eventType: 'status_change', description: 'تم حذف السيارة (حذف ناعم)' });
       await db.createAuditLog({ userId: ctx.user.id, action: 'delete', entityType: 'vehicle', entityId: input.id, newValue: { isActive: false } });
       return { success: true };
     }),
-    getStats: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    getStats: permissionProcedure('view_vehicles').input(z.object({ id: z.number() })).query(async ({ input }) => {
       return db.getVehicleStats(input.id);
     }),
   }),
 
   // ==================== CUSTOMERS ====================
   customers: router({
-    list: protectedProcedure.input(z.object({ search: z.string().optional() }).optional()).query(async ({ input, ctx }) => {
+    list: permissionProcedure('view_customers').input(z.object({ search: z.string().optional() }).optional()).query(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getAllCustomers(input?.search, officeId);
     }),
-    getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    getById: permissionProcedure('view_customers').input(z.object({ id: z.number() })).query(async ({ input }) => {
       const customer = await db.getCustomerById(input.id);
       if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'العميل غير موجود' });
       const customerReservations = await db.getAllReservations({ customerId: input.id });
       const customerContracts = await db.getAllContracts({ customerId: input.id });
       return { customer, reservations: customerReservations, contracts: customerContracts };
     }),
-    findByPhone: protectedProcedure.input(z.object({ phone: z.string() })).query(async ({ input }) => {
+    findByPhone: permissionProcedure('view_customers').input(z.object({ phone: z.string() })).query(async ({ input }) => {
       return db.getCustomerByPhone(input.phone);
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_customers').input(z.object({
       name: z.string().min(1),
       idNumber: z.string().optional(),
       licenseNumber: z.string().optional(),
@@ -181,7 +197,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'customer', entityId: id, newValue: sanitized });
       return { id };
     }),
-    uploadImage: protectedProcedure.input(z.object({
+    uploadImage: permissionProcedure('create_customers').input(z.object({
       customerId: z.number(),
       type: z.enum(['id', 'license']),
       base64: z.string(),
@@ -199,7 +215,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'update', entityType: 'customer', entityId: input.customerId, newValue: { imageType: input.type, url } });
       return { url, key: savedKey };
     }),
-    updateImages: protectedProcedure.input(z.object({
+    updateImages: permissionProcedure('edit_customers').input(z.object({
       id: z.number(),
       idImageKey: z.string().optional(),
       idImageUrl: z.string().optional(),
@@ -211,7 +227,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'update', entityType: 'customer', entityId: id, newValue: data });
       return { success: true };
     }),
-    update: protectedProcedure.input(z.object({
+    update: permissionProcedure('edit_customers').input(z.object({
       id: z.number(),
       name: z.string().optional(),
       idNumber: z.string().optional(),
@@ -233,19 +249,19 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'update', entityType: 'customer', entityId: id, oldValue: old, newValue: data });
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+    delete: permissionProcedure('delete_customers').input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       await db.updateCustomer(input.id, { isActive: false });
       await db.createAuditLog({ userId: ctx.user.id, action: 'delete', entityType: 'customer', entityId: input.id, newValue: { isActive: false } });
       return { success: true };
     }),
-    getPayments: protectedProcedure.input(z.object({ customerId: z.number() })).query(async ({ input }) => {
+    getPayments: permissionProcedure('view_payments').input(z.object({ customerId: z.number() })).query(async ({ input }) => {
       return db.getPaymentsByCustomerId(input.customerId);
     }),
   }),
 
   // ==================== RESERVATIONS ====================
   reservations: router({
-    list: protectedProcedure.input(z.object({
+    list: permissionProcedure('view_reservations').input(z.object({
       status: z.string().optional(),
       vehicleId: z.number().optional(),
       customerId: z.number().optional(),
@@ -253,7 +269,7 @@ export const appRouter = router({
       const officeId = (ctx.user as any).officeId;
       return db.getAllReservations({ ...(input ?? {}), officeId });
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_reservations').input(z.object({
       customerId: z.number(),
       vehicleId: z.number(),
       startDate: z.string(),
@@ -283,12 +299,12 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'reservation', entityId: id, newValue: input });
       return { id };
     }),
-    getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    getById: permissionProcedure('view_reservations').input(z.object({ id: z.number() })).query(async ({ input }) => {
       const reservation = await db.getReservationById(input.id);
       if (!reservation) throw new TRPCError({ code: 'NOT_FOUND', message: 'الحجز غير موجود' });
       return reservation;
     }),
-    update: protectedProcedure.input(z.object({
+    update: permissionProcedure('edit_reservations').input(z.object({
       id: z.number(),
       status: z.enum(['pending', 'confirmed', 'cancelled', 'completed']).optional(),
       startDate: z.string().optional(),
@@ -310,7 +326,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'update', entityType: 'reservation', entityId: id, newValue: data });
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+    delete: permissionProcedure('edit_reservations').input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       const reservation = await db.getReservationById(input.id);
       if (!reservation) throw new TRPCError({ code: 'NOT_FOUND', message: 'الحجز غير موجود' });
       if (reservation.vehicleId) {
@@ -324,7 +340,7 @@ export const appRouter = router({
 
   // ==================== CONTRACTS ====================
   contracts: router({
-    list: protectedProcedure.input(z.object({
+    list: permissionProcedure('view_contracts').input(z.object({
       status: z.string().optional(),
       branchId: z.number().optional(),
       customerId: z.number().optional(),
@@ -332,7 +348,7 @@ export const appRouter = router({
       const officeId = (ctx.user as any).officeId;
       return db.getAllContracts({ ...(input ?? {}), officeId });
     }),
-    getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    getById: permissionProcedure('view_contracts').input(z.object({ id: z.number() })).query(async ({ input }) => {
       const contract = await db.getContractById(input.id);
       if (!contract) throw new TRPCError({ code: 'NOT_FOUND', message: 'العقد غير موجود' });
       const contractPayments = await db.getPaymentsByContractId(input.id);
@@ -341,7 +357,7 @@ export const appRouter = router({
       const totalPaid = await db.getTotalPaymentsByContract(input.id);
       return { contract, payments: contractPayments, handover, return: returnRecord, totalPaid };
     }),
-    generatePdf: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    generatePdf: permissionProcedure('view_contracts').input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       const contract = await db.getContractById(input.id);
       if (!contract) throw new TRPCError({ code: 'NOT_FOUND', message: 'العقد غير موجود' });
       const [customer, vehicle] = await Promise.all([
@@ -354,7 +370,7 @@ export const appRouter = router({
       await db.updateContract(input.id, { pdfUrl: url });
       return { url };
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_contracts').input(z.object({
       customerId: z.number(),
       vehicleId: z.number(),
       branchId: z.number(),
@@ -396,7 +412,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'contract', entityId: id, newValue: { ...input, contractNumber } });
       return { id, contractNumber };
     }),
-    update: protectedProcedure.input(z.object({
+    update: permissionProcedure('edit_contracts').input(z.object({
       id: z.number(),
       status: z.enum(['draft', 'active', 'completed', 'cancelled']).optional(),
       endMileage: z.number().optional(),
@@ -414,12 +430,16 @@ export const appRouter = router({
 
   // ==================== HANDOVERS ====================
   handovers: router({
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('edit_contracts').input(z.object({
       contractId: z.number(),
       mileage: z.number(),
       fuelLevel: z.string().optional(),
+      fuelCost: z.string().optional(),
+      fuelLiters: z.string().optional(),
       notes: z.string().optional(),
     })).mutation(async ({ input, ctx }) => {
+      if (!input.fuelCost) delete input.fuelCost;
+      if (!input.fuelLiters) delete input.fuelLiters;
       const id = await db.createHandover({ ...input, createdBy: ctx.user.id });
       // Update contract start mileage
       await db.updateContract(input.contractId, { startMileage: input.mileage });
@@ -435,7 +455,7 @@ export const appRouter = router({
 
   // ==================== RETURNS ====================
   returns: router({
-    calculate: protectedProcedure.input(z.object({
+    calculate: permissionProcedure('edit_contracts').input(z.object({
       contractId: z.number(),
       mileage: z.number(),
       returnDate: z.string().optional(),
@@ -461,15 +481,19 @@ export const appRouter = router({
       }
       return { lateDays, lateFees, additionalKmFees, kmDriven, allowedKm };
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('edit_contracts').input(z.object({
       contractId: z.number(),
       mileage: z.number(),
       fuelLevel: z.string().optional(),
+      fuelCost: z.string().optional(),
+      fuelLiters: z.string().optional(),
       damageNotes: z.string().optional(),
       damageAmount: z.string().optional(),
       lateFees: z.string().optional(),
       additionalKmFees: z.string().optional(),
     })).mutation(async ({ input, ctx }) => {
+      if (!input.fuelCost) delete input.fuelCost;
+      if (!input.fuelLiters) delete input.fuelLiters;
       const id = await db.createReturn({ ...input, createdBy: ctx.user.id } as any);
       const contract = await db.getContractById(input.contractId);
       if (contract) {
@@ -493,10 +517,10 @@ export const appRouter = router({
 
   // ==================== PAYMENTS ====================
   payments: router({
-    listByContract: protectedProcedure.input(z.object({ contractId: z.number() })).query(async ({ input }) => {
+    listByContract: permissionProcedure('view_payments').input(z.object({ contractId: z.number() })).query(async ({ input }) => {
       return db.getPaymentsByContractId(input.contractId);
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_payments').input(z.object({
       contractId: z.number(),
       amount: z.string(),
       method: z.enum(['cash', 'card', 'bank_transfer', 'stc_pay']),
@@ -506,7 +530,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'payment', entityId: id, newValue: input });
       return { id };
     }),
-    generatePdf: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    generatePdf: permissionProcedure('view_payments').input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       const payment = await db.getPaymentById(input.id);
       if (!payment) throw new TRPCError({ code: 'NOT_FOUND', message: 'الدفعة غير موجودة' });
       const contract = await db.getContractById(payment.contractId);
@@ -521,14 +545,14 @@ export const appRouter = router({
 
   // ==================== TRANSFERS ====================
   transfers: router({
-    list: protectedProcedure.input(z.object({
+    list: permissionProcedure('view_transfers').input(z.object({
       status: z.string().optional(),
       vehicleId: z.number().optional(),
     }).optional()).query(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getAllTransfers({ ...(input ?? {}), officeId });
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_transfers').input(z.object({
       vehicleId: z.number(),
       fromBranchId: z.number(),
       toBranchId: z.number(),
@@ -540,7 +564,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'transfer', entityId: id, newValue: input });
       return { id };
     }),
-    receive: protectedProcedure.input(z.object({
+    receive: permissionProcedure('create_transfers').input(z.object({
       id: z.number(),
       vehicleId: z.number(),
       toBranchId: z.number(),
@@ -555,14 +579,14 @@ export const appRouter = router({
 
   // ==================== MAINTENANCE ====================
   maintenance: router({
-    list: protectedProcedure.input(z.object({
+    list: permissionProcedure('view_maintenance').input(z.object({
       vehicleId: z.number().optional(),
       status: z.string().optional(),
     }).optional()).query(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getAllMaintenance({ ...(input ?? {}), officeId });
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_maintenance').input(z.object({
       vehicleId: z.number(),
       type: z.enum(['scheduled', 'unscheduled', 'preventive']).optional(),
       reason: z.string().min(1),
@@ -586,7 +610,7 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'maintenance', entityId: id, newValue: input });
       return { id };
     }),
-    complete: protectedProcedure.input(z.object({
+    complete: permissionProcedure('edit_maintenance').input(z.object({
       id: z.number(),
       vehicleId: z.number(),
       cost: z.string().optional(),
@@ -602,10 +626,10 @@ export const appRouter = router({
 
   // ==================== VEHICLE DOCUMENTS ====================
   vehicleDocuments: router({
-    list: protectedProcedure.input(z.object({ vehicleId: z.number() })).query(async ({ input }) => {
+    list: permissionProcedure('view_vehicles').input(z.object({ vehicleId: z.number() })).query(async ({ input }) => {
       return db.getVehicleDocuments(input.vehicleId);
     }),
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('edit_vehicles').input(z.object({
       vehicleId: z.number(),
       type: z.enum(['insurance', 'registration', 'inspection']),
       documentUrl: z.string().optional(),
@@ -647,11 +671,11 @@ export const appRouter = router({
       });
       return { id };
     }),
-    latest: protectedProcedure.query(async ({ ctx }) => {
+    latest: permissionProcedure('view_tracking').query(async ({ ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getLatestVehicleLocations(officeId);
     }),
-    history: protectedProcedure.input(z.object({
+    history: permissionProcedure('view_tracking').input(z.object({
       vehicleId: z.number(),
       from: z.string().optional(),
       to: z.string().optional(),
@@ -664,19 +688,102 @@ export const appRouter = router({
     }),
   }),
 
+  // ==================== INSPECTION FORMS ====================
+  inspections: router({
+    templates: permissionProcedure('edit_contracts').input(z.object({
+      context: z.enum(['handover', 'return']).optional(),
+    }).optional()).query(async ({ input, ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      return db.getInspectionTemplates(officeId, input?.context);
+    }),
+    createTemplate: adminProcedure.input(z.object({
+      name: z.string().min(1),
+      context: z.enum(['handover', 'return', 'both']).default('both'),
+      fields: z.array(z.object({
+        key: z.string().min(1),
+        type: z.enum(['photo', 'number', 'text', 'pass_fail', 'dropdown', 'date', 'signature']),
+        label: z.string().min(1),
+        required: z.boolean().optional(),
+        options: z.array(z.string()).optional(),
+      })).min(1),
+    })).mutation(async ({ input, ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      const id = await db.createInspectionTemplate({ ...input, officeId });
+      await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'inspectionTemplate', entityId: id, newValue: input });
+      return { id };
+    }),
+    updateTemplate: adminProcedure.input(z.object({
+      id: z.number(),
+      name: z.string().min(1).optional(),
+      context: z.enum(['handover', 'return', 'both']).optional(),
+      fields: z.array(z.object({
+        key: z.string().min(1),
+        type: z.enum(['photo', 'number', 'text', 'pass_fail', 'dropdown', 'date', 'signature']),
+        label: z.string().min(1),
+        required: z.boolean().optional(),
+        options: z.array(z.string()).optional(),
+      })).min(1).optional(),
+      isActive: z.boolean().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const { id, ...data } = input;
+      await db.updateInspectionTemplate(id, data);
+      await db.createAuditLog({ userId: ctx.user.id, action: 'update', entityType: 'inspectionTemplate', entityId: id, newValue: data });
+      return { success: true };
+    }),
+    uploadPhoto: permissionProcedure('edit_contracts').input(z.object({
+      base64: z.string(),
+      mimeType: z.string(),
+    })).mutation(async ({ input, ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      const ext = input.mimeType.split('/')[1] || 'jpg';
+      const buffer = Buffer.from(input.base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+      const { url } = await storagePut(`inspections/${officeId}/photo.${ext}`, buffer, input.mimeType);
+      return { url };
+    }),
+    submit: permissionProcedure('edit_contracts').input(z.object({
+      templateId: z.number(),
+      contractId: z.number(),
+      context: z.enum(['handover', 'return']),
+      answers: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    })).mutation(async ({ input, ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      const template = await db.getInspectionTemplateById(input.templateId);
+      if (!template || template.officeId !== officeId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'نموذج الفحص غير موجود' });
+      }
+      const missing = (template.fields as any[])
+        .filter(f => f.required && (input.answers[f.key] === undefined || input.answers[f.key] === null || input.answers[f.key] === ''))
+        .map(f => f.label);
+      if (missing.length > 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `حقول الفحص التالية مطلوبة: ${missing.join('، ')}` });
+      }
+      const contract = await db.getContractById(input.contractId);
+      const id = await db.createInspectionSubmission({
+        ...input,
+        vehicleId: contract?.vehicleId,
+        officeId,
+        submittedBy: ctx.user.id,
+      });
+      return { id };
+    }),
+    listByContract: permissionProcedure('view_contracts').input(z.object({ contractId: z.number() })).query(async ({ input }) => {
+      return db.getInspectionSubmissionsByContract(input.contractId);
+    }),
+  }),
+
   // ==================== ALERTS ====================
   alerts: router({
-    list: protectedProcedure.input(z.object({
+    list: permissionProcedure('view_alerts').input(z.object({
       isRead: z.boolean().optional(),
       branchId: z.number().optional(),
     }).optional()).query(async ({ input }) => {
       return db.getAlerts(input ?? undefined);
     }),
-    markAsRead: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    markAsRead: permissionProcedure('view_alerts').input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       await db.markAlertAsRead(input.id);
       return { success: true };
     }),
-    markAllAsRead: protectedProcedure.input(z.object({ branchId: z.number().optional() }).optional()).mutation(async ({ input }) => {
+    markAllAsRead: permissionProcedure('view_alerts').input(z.object({ branchId: z.number().optional() }).optional()).mutation(async ({ input }) => {
       await db.markAllAlertsAsRead(input?.branchId);
       return { success: true };
     }),
@@ -696,7 +803,7 @@ export const appRouter = router({
 
   // ==================== DASHBOARD ====================
   dashboard: router({
-    stats: protectedProcedure.input(z.object({ branchId: z.number().optional() }).optional()).query(async ({ input, ctx }) => {
+    stats: permissionProcedure('view_dashboard').input(z.object({ branchId: z.number().optional() }).optional()).query(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getDashboardStats(input?.branchId, officeId);
     }),
@@ -712,7 +819,7 @@ export const appRouter = router({
 
   // ==================== QUICK CONTRACT ====================
   quickContract: router({
-    create: protectedProcedure.input(z.object({
+    create: permissionProcedure('create_contracts').input(z.object({
       // Customer: either existing or new
       customerId: z.number().optional(),
       newCustomer: z.object({
@@ -1099,7 +1206,7 @@ export const appRouter = router({
 
   // ==================== CUSTOMER PROFILE ====================
   customerProfile: router({
-    getFullProfile: protectedProcedure.input(z.object({ customerId: z.number() })).query(async ({ input }) => {
+    getFullProfile: permissionProcedure('view_customers').input(z.object({ customerId: z.number() })).query(async ({ input }) => {
       const customer = await db.getCustomerById(input.customerId);
       if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'العميل غير موجود' });
       const customerContracts = await db.getAllContracts({ customerId: input.customerId });
@@ -1125,30 +1232,150 @@ export const appRouter = router({
 
   // ==================== DASHBOARD STATS ====================
   dashboardStats: router({
-    monthlyRevenue: protectedProcedure.query(async ({ ctx }) => {
+    monthlyRevenue: permissionProcedure('view_dashboard').query(async ({ ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getMonthlyRevenue(6, officeId);
     }),
-    fleetStatus: protectedProcedure.query(async ({ ctx }) => {
+    fleetStatus: permissionProcedure('view_dashboard').query(async ({ ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getDashboardStats(undefined, officeId);
     }),
   }),
 
+  // ==================== PDF REPORTS ====================
+  reports: router({
+    fleetPdf: permissionProcedure('view_reports').mutation(async ({ ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      const dbOffice = await import('./db-office');
+      const [office, vehicles, branches] = await Promise.all([
+        dbOffice.getOfficeById(officeId),
+        db.getAllVehicles({ officeId }),
+        db.getAllBranches(officeId),
+      ]);
+      const branchName = new Map(branches.map(b => [b.id, b.name]));
+      const statusLabels: Record<string, string> = { available: 'متاحة', reserved: 'محجوزة', rented: 'مؤجرة', late: 'متأخرة', maintenance: 'صيانة', in_transfer: 'قيد النقل' };
+      const categoryLabels: Record<string, string> = { economy: 'اقتصادية', family: 'عائلية', luxury: 'فاخرة' };
+      const countBy = (status: string) => vehicles.filter(v => v.status === status).length;
+      const html = buildReportHtml({
+        title: 'تقرير حالة الأسطول',
+        officeName: office?.name,
+        summary: [
+          { label: 'إجمالي السيارات', value: String(vehicles.length) },
+          { label: 'متاحة', value: String(countBy('available')) },
+          { label: 'مؤجرة', value: String(countBy('rented')) },
+          { label: 'في الصيانة', value: String(countBy('maintenance')) },
+          { label: 'متأخرة', value: String(countBy('late')) },
+        ],
+        tables: [{
+          headers: ['اللوحة', 'السيارة', 'الفئة', 'الفرع', 'الحالة', 'العداد (كم)', 'السعر اليومي'],
+          rows: vehicles.map(v => [
+            v.plateNumber,
+            `${v.brand} ${v.model} ${v.year}`,
+            categoryLabels[v.category] ?? v.category,
+            branchName.get(v.branchId) ?? '-',
+            statusLabels[v.status] ?? v.status,
+            v.currentMileage.toLocaleString('ar-SA'),
+            `${Number(v.dailyRate).toLocaleString('ar-SA')} ر.س`,
+          ]),
+        }],
+      });
+      const pdf = await renderHtmlToPdf(html);
+      const { url } = await storagePut(`reports/${officeId}/fleet.pdf`, pdf, 'application/pdf');
+      return { url };
+    }),
+    revenuePdf: permissionProcedure('view_reports').input(z.object({
+      months: z.number().min(1).max(24).default(6),
+    }).optional()).mutation(async ({ input, ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      const dbOffice = await import('./db-office');
+      const [office, revenue] = await Promise.all([
+        dbOffice.getOfficeById(officeId),
+        db.getMonthlyRevenue(input?.months ?? 6, officeId),
+      ]);
+      const total = revenue.reduce((sum, r) => sum + r.revenue, 0);
+      const html = buildReportHtml({
+        title: 'تقرير الإيرادات الشهرية',
+        subtitle: `آخر ${input?.months ?? 6} أشهر`,
+        officeName: office?.name,
+        summary: [
+          { label: 'إجمالي الإيرادات', value: `${total.toLocaleString('ar-SA')} ر.س` },
+          { label: 'متوسط شهري', value: `${Math.round(total / revenue.length).toLocaleString('ar-SA')} ر.س` },
+        ],
+        tables: [{
+          headers: ['الشهر', 'الإيرادات'],
+          rows: revenue.map(r => [r.month, `${r.revenue.toLocaleString('ar-SA')} ر.س`]),
+        }],
+      });
+      const pdf = await renderHtmlToPdf(html);
+      const { url } = await storagePut(`reports/${officeId}/revenue.pdf`, pdf, 'application/pdf');
+      return { url };
+    }),
+    contractsPdf: permissionProcedure('view_reports').input(z.object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+    }).optional()).mutation(async ({ input, ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      const dbOffice = await import('./db-office');
+      const [office, allContracts, customers, vehicles] = await Promise.all([
+        dbOffice.getOfficeById(officeId),
+        db.getAllContracts({ officeId }),
+        db.getAllCustomers(undefined, officeId),
+        db.getAllVehicles({ officeId }),
+      ]);
+      const from = input?.from ? new Date(input.from) : null;
+      const to = input?.to ? new Date(`${input.to}T23:59:59`) : null;
+      const filtered = allContracts.filter(c => {
+        const created = new Date(c.createdAt);
+        return (!from || created >= from) && (!to || created <= to);
+      });
+      const customerName = new Map(customers.map(c => [c.id, c.name]));
+      const vehiclePlate = new Map(vehicles.map(v => [v.id, v.plateNumber]));
+      const statusLabels: Record<string, string> = { draft: 'مسودة', active: 'نشط', completed: 'مكتمل', cancelled: 'ملغي' };
+      const total = filtered.reduce((sum, c) => sum + Number(c.finalPrice || c.basePrice), 0);
+      const html = buildReportHtml({
+        title: 'تقرير العقود',
+        subtitle: from || to
+          ? `من ${from ? from.toLocaleDateString('ar-SA') : 'البداية'} إلى ${to ? to.toLocaleDateString('ar-SA') : 'اليوم'}`
+          : 'جميع العقود',
+        officeName: office?.name,
+        summary: [
+          { label: 'عدد العقود', value: String(filtered.length) },
+          { label: 'إجمالي القيمة', value: `${total.toLocaleString('ar-SA')} ر.س` },
+          { label: 'عقود نشطة', value: String(filtered.filter(c => c.status === 'active').length) },
+        ],
+        tables: [{
+          headers: ['رقم العقد', 'العميل', 'اللوحة', 'البداية', 'النهاية', 'الحالة', 'الإجمالي'],
+          rows: filtered.map(c => [
+            c.contractNumber,
+            customerName.get(c.customerId) ?? '-',
+            vehiclePlate.get(c.vehicleId) ?? '-',
+            new Date(c.startDate).toLocaleDateString('ar-SA'),
+            new Date(c.endDate).toLocaleDateString('ar-SA'),
+            statusLabels[c.status] ?? c.status,
+            `${Number(c.finalPrice || c.basePrice).toLocaleString('ar-SA')} ر.س`,
+          ]),
+        }],
+      });
+      const pdf = await renderHtmlToPdf(html);
+      const { url } = await storagePut(`reports/${officeId}/contracts.pdf`, pdf, 'application/pdf');
+      return { url };
+    }),
+  }),
+
   // ==================== EXPORT ====================
   export: router({
-    contracts: protectedProcedure.input(z.object({
+    contracts: permissionProcedure('view_reports').input(z.object({
       status: z.string().optional(),
       branchId: z.number().optional(),
     }).optional()).query(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getAllContracts({ ...(input ?? {}), officeId });
     }),
-    customers: protectedProcedure.query(async ({ ctx }) => {
+    customers: permissionProcedure('view_reports').query(async ({ ctx }) => {
       const officeId = (ctx.user as any).officeId;
       return db.getAllCustomers(undefined, officeId);
     }),
-    payments: protectedProcedure.input(z.object({
+    payments: permissionProcedure('view_reports').input(z.object({
       contractId: z.number().optional(),
     }).optional()).query(async ({ input, ctx }) => {
       const officeId = (ctx.user as any).officeId;
@@ -1213,6 +1440,20 @@ export const appRouter = router({
       if (!officeId) return [];
       const dbOffice = await import('./db-office');
       return dbOffice.getOfficeMembersByOffice(officeId);
+    }),
+
+    // Resolved permission map for the current user (drives sidebar visibility)
+    myPermissions: protectedProcedure.query(async ({ ctx }) => {
+      const user = ctx.user as any;
+      let memberPermissions: unknown = null;
+      if (user.role !== 'owner' && user.officeId) {
+        const dbOffice = await import('./db-office');
+        const member = await dbOffice.getOfficeMember(user.officeId, user.id);
+        memberPermissions = member?.permissions ?? null;
+      }
+      return Object.fromEntries(
+        ALL_PERMISSION_KEYS.map(key => [key, resolvePermission(user.role, memberPermissions, key)]),
+      ) as Record<string, boolean>;
     }),
 
     // Update member permissions/role

@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Car } from "lucide-react";
+import { Plus, Car, Tag } from "lucide-react";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const statusLabels: Record<string, string> = {
@@ -36,11 +36,23 @@ export default function VehiclesList() {
   const [, setLocation] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [tagFilter, setTagFilter] = useState<string>("all");
 
   const { data: vehicles, isLoading } = trpc.vehicles.list.useQuery({
     status: statusFilter !== "all" ? statusFilter : undefined,
     category: categoryFilter !== "all" ? categoryFilter : undefined,
+    tag: tagFilter !== "all" ? tagFilter : undefined,
   });
+
+  // Distinct tags across the (unfiltered-by-tag) office fleet for the dropdown
+  const { data: allVehicles } = trpc.vehicles.list.useQuery({});
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of allVehicles ?? []) {
+      if (Array.isArray(v.tags)) for (const t of v.tags as string[]) set.add(t);
+    }
+    return Array.from(set).sort();
+  }, [allVehicles]);
 
   return (
     <div className="space-y-6">
@@ -78,6 +90,17 @@ export default function VehiclesList() {
             <SelectItem value="luxury">فاخرة</SelectItem>
           </SelectContent>
         </Select>
+        {availableTags.length > 0 && (
+          <Select value={tagFilter} onValueChange={setTagFilter}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="الوسم" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">جميع الوسوم</SelectItem>
+              {availableTags.map(tag => <SelectItem key={tag} value={tag}>{tag}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {isLoading ? (
@@ -124,6 +147,15 @@ export default function VehiclesList() {
                   <span className="text-muted-foreground">العداد</span>
                   <span>{vehicle.currentMileage.toLocaleString('ar-SA')} كم</span>
                 </div>
+                {Array.isArray(vehicle.tags) && (vehicle.tags as string[]).length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {(vehicle.tags as string[]).map(tag => (
+                      <Badge key={tag} variant="outline" className="text-xs gap-1">
+                        <Tag className="h-2.5 w-2.5" />{tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

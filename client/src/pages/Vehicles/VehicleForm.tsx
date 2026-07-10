@@ -1,10 +1,11 @@
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, X, Tag } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -22,6 +23,14 @@ export default function VehicleForm() {
     color: "", category: "economy" as string, currentMileage: 0,
     dailyRate: "", weeklyRate: "", monthlyRate: "", branchId: 0,
   });
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+
+  function addTag() {
+    const value = tagInput.trim();
+    if (value && !tags.includes(value)) setTags(prev => [...prev, value]);
+    setTagInput("");
+  }
 
   useEffect(() => {
     if (vehicleData?.vehicle) {
@@ -32,6 +41,7 @@ export default function VehicleForm() {
         dailyRate: String(v.dailyRate), weeklyRate: v.weeklyRate ? String(v.weeklyRate) : "",
         monthlyRate: v.monthlyRate ? String(v.monthlyRate) : "", branchId: v.branchId,
       });
+      setTags(Array.isArray(v.tags) ? (v.tags as string[]) : []);
     }
   }, [vehicleData]);
 
@@ -52,9 +62,9 @@ export default function VehicleForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isEdit) {
-      updateMutation.mutate({ id: Number(params.id), ...form, category: form.category as 'economy' | 'family' | 'luxury' });
+      updateMutation.mutate({ id: Number(params.id), ...form, tags, category: form.category as 'economy' | 'family' | 'luxury' });
     } else {
-      createMutation.mutate({ ...form, category: form.category as 'economy' | 'family' | 'luxury' });
+      createMutation.mutate({ ...form, tags, category: form.category as 'economy' | 'family' | 'luxury' });
     }
   };
 
@@ -98,6 +108,30 @@ export default function VehicleForm() {
               <div className="space-y-2"><Label>السعر اليومي (ر.س) *</Label><Input value={form.dailyRate} onChange={e => setForm(f => ({ ...f, dailyRate: e.target.value }))} required /></div>
               <div className="space-y-2"><Label>السعر الأسبوعي (ر.س)</Label><Input value={form.weeklyRate} onChange={e => setForm(f => ({ ...f, weeklyRate: e.target.value }))} /></div>
               <div className="space-y-2"><Label>السعر الشهري (ر.س)</Label><Input value={form.monthlyRate} onChange={e => setForm(f => ({ ...f, monthlyRate: e.target.value }))} /></div>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><Tag className="h-4 w-4 text-muted-foreground" /> الوسوم</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+                  placeholder="مثال: أسطول الشركات — اضغط Enter للإضافة"
+                />
+                <Button type="button" variant="outline" onClick={addTag}>إضافة</Button>
+              </div>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {tags.map(tag => (
+                    <Badge key={tag} variant="secondary" className="gap-1">
+                      {tag}
+                      <button type="button" onClick={() => setTags(prev => prev.filter(t => t !== tag))}>
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex gap-3 pt-4">
               <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>

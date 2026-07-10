@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/_core/hooks/useAuth";
 import UsersManagement from "./UsersManagement";
+import InspectionTemplatesTab from "./InspectionTemplatesTab";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -53,6 +54,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="branches">
         <TabsList>
           <TabsTrigger value="branches">الفروع</TabsTrigger>
+          <TabsTrigger value="inspections">نماذج الفحص</TabsTrigger>
           <TabsTrigger value="users">المستخدمين</TabsTrigger>
           <TabsTrigger value="account">الحساب</TabsTrigger>
         </TabsList>
@@ -98,6 +100,10 @@ export default function SettingsPage() {
             ))}
             {branches?.length === 0 && <div className="text-center py-8 text-muted-foreground">لا توجد فروع</div>}
           </div>
+        </TabsContent>
+
+        <TabsContent value="inspections" className="mt-4">
+          <InspectionTemplatesTab />
         </TabsContent>
 
         <TabsContent value="users" className="mt-4">

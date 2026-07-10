@@ -18,6 +18,8 @@ import {
   vehicleDocuments, InsertVehicleDocument,
   vehicleHistory, InsertVehicleHistory,
   vehicleLocations, InsertVehicleLocation,
+  inspectionTemplates, InsertInspectionTemplate,
+  inspectionSubmissions, InsertInspectionSubmission,
   auditLogs, InsertAuditLog,
   alerts, InsertAlert,
 } from "../drizzle/schema";
@@ -125,6 +127,7 @@ export async function createLocalUser(data: {
   role?: 'owner' | 'admin' | 'staff' | 'accountant';
   officeId?: number | null;
   userType?: 'owner' | 'employee';
+  isActive?: boolean;
 }) {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
@@ -139,7 +142,7 @@ export async function createLocalUser(data: {
     role: data.role ?? 'staff',
     officeId: data.officeId ?? null,
     userType: data.userType ?? 'employee',
-    isActive: data.userType === 'owner' ? true : false,
+    isActive: data.isActive ?? (data.userType === 'owner'),
     lastSignedIn: new Date(),
   });
   const created = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
@@ -208,6 +211,19 @@ export async function updateBranch(id: number, data: Partial<InsertBranch>) {
 }
 
 // ==================== VEHICLES ====================
+// MariaDB stores JSON columns as longtext, so mysql2 returns them as raw
+// strings instead of parsed values — normalize tags back to an array.
+function normalizeVehicleTags<T extends { tags: unknown }>(vehicle: T): T {
+  if (typeof vehicle.tags === "string") {
+    try {
+      vehicle.tags = JSON.parse(vehicle.tags);
+    } catch {
+      vehicle.tags = null;
+    }
+  }
+  return vehicle;
+}
+
 export async function getAllVehicles(filters?: { branchId?: number; status?: string; category?: string; officeId?: number }) {
   const db = await getDb();
   if (!db) return [];
@@ -216,14 +232,15 @@ export async function getAllVehicles(filters?: { branchId?: number; status?: str
   if (filters?.branchId) conditions.push(eq(vehicles.branchId, filters.branchId));
   if (filters?.status) conditions.push(eq(vehicles.status, filters.status as any));
   if (filters?.category) conditions.push(eq(vehicles.category, filters.category as any));
-  return db.select().from(vehicles).where(and(...conditions)).orderBy(desc(vehicles.createdAt));
+  const rows = await db.select().from(vehicles).where(and(...conditions)).orderBy(desc(vehicles.createdAt));
+  return rows.map(normalizeVehicleTags);
 }
 
 export async function getVehicleById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(vehicles).where(eq(vehicles.id, id)).limit(1);
-  return result[0];
+  return result[0] ? normalizeVehicleTags(result[0]) : undefined;
 }
 
 export async function createVehicle(data: InsertVehicle) {
@@ -512,6 +529,64 @@ export async function addVehicleHistory(data: InsertVehicleHistory) {
   await db.insert(vehicleHistory).values(data);
 }
 
+// ==================== INSPECTION FORMS ====================
+function parseJsonColumn<T extends Record<string, unknown>>(row: T, key: keyof T): T {
+  const value = row[key];
+  if (typeof value === "string") {
+    try {
+      (row as Record<string, unknown>)[key as string] = JSON.parse(value);
+    } catch {
+      (row as Record<string, unknown>)[key as string] = null;
+    }
+  }
+  return row;
+}
+
+export async function getInspectionTemplates(officeId: number, context?: "handover" | "return") {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(inspectionTemplates.officeId, officeId), eq(inspectionTemplates.isActive, true)];
+  if (context) {
+    conditions.push(or(eq(inspectionTemplates.context, context), eq(inspectionTemplates.context, "both"))!);
+  }
+  const rows = await db.select().from(inspectionTemplates).where(and(...conditions)).orderBy(desc(inspectionTemplates.createdAt));
+  return rows.map(r => parseJsonColumn(r, "fields"));
+}
+
+export async function getInspectionTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(inspectionTemplates).where(eq(inspectionTemplates.id, id)).limit(1);
+  return result[0] ? parseJsonColumn(result[0], "fields") : undefined;
+}
+
+export async function createInspectionTemplate(data: InsertInspectionTemplate) {
+  const db = await getDb();
+  if (!db) return;
+  const result = await db.insert(inspectionTemplates).values(data);
+  return result[0].insertId;
+}
+
+export async function updateInspectionTemplate(id: number, data: Partial<InsertInspectionTemplate>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(inspectionTemplates).set(data).where(eq(inspectionTemplates.id, id));
+}
+
+export async function createInspectionSubmission(data: InsertInspectionSubmission) {
+  const db = await getDb();
+  if (!db) return;
+  const result = await db.insert(inspectionSubmissions).values(data);
+  return result[0].insertId;
+}
+
+export async function getInspectionSubmissionsByContract(contractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(inspectionSubmissions).where(eq(inspectionSubmissions.contractId, contractId)).orderBy(desc(inspectionSubmissions.createdAt));
+  return rows.map(r => parseJsonColumn(r, "answers"));
+}
+
 // ==================== VEHICLE LOCATIONS (GPS tracking) ====================
 export async function ingestVehicleLocation(data: InsertVehicleLocation) {
   const db = await getDb();
@@ -602,7 +677,7 @@ export async function markAllAlertsAsRead(branchId?: number) {
 // ==================== VEHICLE STATS ====================
 export async function getVehicleStats(vehicleId: number) {
   const db = await getDb();
-  if (!db) return { totalRevenue: 0, totalContracts: 0, occupancyRate: 0, totalDaysRented: 0 };
+  if (!db) return { totalRevenue: 0, totalContracts: 0, occupancyRate: 0, totalDaysRented: 0, totalFuelCost: 0 };
   // Total contracts and revenue
   const vehicleContracts = await db.select().from(contracts).where(eq(contracts.vehicleId, vehicleId));
   const totalContracts = vehicleContracts.length;
@@ -611,7 +686,17 @@ export async function getVehicleStats(vehicleId: number) {
   // Occupancy rate (last 90 days)
   const daysInPeriod = 90;
   const occupancyRate = daysInPeriod > 0 ? Math.round((totalDaysRented / daysInPeriod) * 100) : 0;
-  return { totalRevenue, totalContracts, occupancyRate: Math.min(occupancyRate, 100), totalDaysRented };
+  // Fuel cost across this vehicle's handovers/returns
+  let totalFuelCost = 0;
+  const contractIds = vehicleContracts.map(c => c.id);
+  if (contractIds.length > 0) {
+    const [handoverFuel, returnFuel] = await Promise.all([
+      db.select({ total: sum(handovers.fuelCost) }).from(handovers).where(inArray(handovers.contractId, contractIds)),
+      db.select({ total: sum(returns.fuelCost) }).from(returns).where(inArray(returns.contractId, contractIds)),
+    ]);
+    totalFuelCost = Number(handoverFuel[0]?.total ?? 0) + Number(returnFuel[0]?.total ?? 0);
+  }
+  return { totalRevenue, totalContracts, occupancyRate: Math.min(occupancyRate, 100), totalDaysRented, totalFuelCost };
 }
 
 // ==================== ALL PAYMENTS (for export) ====================

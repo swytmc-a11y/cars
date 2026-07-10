@@ -14,6 +14,7 @@ import {
   Shield, Briefcase, Calculator, Crown, Settings, Eye, EyeOff, Lock, Mail, User, KeyRound
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { PERMISSION_MODULES, ROLE_TEMPLATES } from "@shared/permissions";
 
 const ROLE_CONFIG = {
   owner: { label: "مالك المكتب", icon: Crown, color: "bg-amber-100 text-amber-800 border-amber-200" },
@@ -22,56 +23,49 @@ const ROLE_CONFIG = {
   accountant: { label: "محاسب", icon: Calculator, color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
 };
 
-const PERMISSIONS_LABELS: Record<string, string> = {
-  view_dashboard: "عرض لوحة التحكم",
-  view_vehicles: "عرض السيارات",
-  create_vehicles: "إضافة سيارات",
-  edit_vehicles: "تعديل السيارات",
-  delete_vehicles: "حذف السيارات",
-  view_customers: "عرض العملاء",
-  create_customers: "إضافة عملاء",
-  edit_customers: "تعديل العملاء",
-  delete_customers: "حذف العملاء",
-  view_contracts: "عرض العقود",
-  create_contracts: "إنشاء عقود",
-  edit_contracts: "تعديل العقود",
-  delete_contracts: "حذف العقود",
-  view_payments: "عرض المدفوعات",
-  create_payments: "إضافة مدفوعات",
-  view_maintenance: "عرض الصيانة",
-  create_maintenance: "إضافة صيانة",
-  edit_maintenance: "تعديل الصيانة",
-  view_reports: "عرض التقارير",
-  manage_branches: "إدارة الفروع",
-  manage_staff: "إدارة الموظفين",
-};
+const DEFAULT_PERMISSIONS: Record<string, Record<string, boolean>> = ROLE_TEMPLATES;
 
-const DEFAULT_PERMISSIONS: Record<string, Record<string, boolean>> = {
-  admin: {
-    view_dashboard: true, view_vehicles: true, create_vehicles: true, edit_vehicles: true, delete_vehicles: true,
-    view_customers: true, create_customers: true, edit_customers: true, delete_customers: false,
-    view_contracts: true, create_contracts: true, edit_contracts: true, delete_contracts: false,
-    view_payments: true, create_payments: true,
-    view_maintenance: true, create_maintenance: true, edit_maintenance: true,
-    view_reports: true, manage_branches: true, manage_staff: false,
-  },
-  staff: {
-    view_dashboard: true, view_vehicles: true, create_vehicles: false, edit_vehicles: false, delete_vehicles: false,
-    view_customers: true, create_customers: true, edit_customers: true, delete_customers: false,
-    view_contracts: true, create_contracts: true, edit_contracts: true, delete_contracts: false,
-    view_payments: true, create_payments: true,
-    view_maintenance: true, create_maintenance: false, edit_maintenance: false,
-    view_reports: false, manage_branches: false, manage_staff: false,
-  },
-  accountant: {
-    view_dashboard: true, view_vehicles: true, create_vehicles: false, edit_vehicles: false, delete_vehicles: false,
-    view_customers: true, create_customers: false, edit_customers: false, delete_customers: false,
-    view_contracts: true, create_contracts: false, edit_contracts: false, delete_contracts: false,
-    view_payments: true, create_payments: true,
-    view_maintenance: false, create_maintenance: false, edit_maintenance: false,
-    view_reports: true, manage_branches: false, manage_staff: false,
-  },
-};
+function PermissionsGrid({ value, onChange }: {
+  value: Record<string, boolean>;
+  onChange: (next: Record<string, boolean>) => void;
+}) {
+  return (
+    <div className="bg-gray-50 rounded-lg p-3 max-h-72 overflow-y-auto space-y-3 border border-gray-100">
+      {PERMISSION_MODULES.map(module => {
+        const allOn = module.actions.every(a => value[a.key]);
+        return (
+          <div key={module.key} className="bg-white rounded-lg border border-gray-100 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-gray-800">{module.label}</span>
+              <button
+                type="button"
+                className="text-xs text-blue-500 hover:text-blue-700"
+                onClick={() => {
+                  const next = { ...value };
+                  for (const a of module.actions) next[a.key] = !allOn;
+                  onChange(next);
+                }}
+              >
+                {allOn ? "إلغاء الكل" : "تحديد الكل"}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {module.actions.map(action => (
+                <div key={action.key} className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">{action.label}</span>
+                  <Switch
+                    checked={value[action.key] ?? false}
+                    onCheckedChange={(v) => onChange({ ...value, [action.key]: v })}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function StaffManagementPage() {
   const { user } = useAuth();
@@ -318,19 +312,9 @@ export default function StaffManagementPage() {
             {/* Permissions */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5 text-sm font-medium">
-                <Shield className="h-4 w-4 text-blue-500" /> الصلاحيات
+                <Shield className="h-4 w-4 text-blue-500" /> الصلاحيات (حسب الوحدة)
               </Label>
-              <div className="bg-gray-50 rounded-lg p-3 max-h-52 overflow-y-auto space-y-2 border border-gray-100">
-                {Object.entries(PERMISSIONS_LABELS).map(([key, label]) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <Switch
-                      checked={empPermissions[key] ?? false}
-                      onCheckedChange={(v) => setEmpPermissions(prev => ({ ...prev, [key]: v }))}
-                    />
-                  </div>
-                ))}
-              </div>
+              <PermissionsGrid value={empPermissions} onChange={setEmpPermissions} />
             </div>
           </div>
           <DialogFooter className="gap-2 mt-2">
@@ -378,19 +362,9 @@ export default function StaffManagementPage() {
             </div>
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5 text-sm font-medium">
-                <Shield className="h-4 w-4 text-blue-500" /> الصلاحيات
+                <Shield className="h-4 w-4 text-blue-500" /> الصلاحيات (حسب الوحدة)
               </Label>
-              <div className="bg-gray-50 rounded-lg p-3 max-h-52 overflow-y-auto space-y-2 border border-gray-100">
-                {Object.entries(PERMISSIONS_LABELS).map(([key, label]) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <Switch
-                      checked={editPermissions[key] ?? false}
-                      onCheckedChange={(v) => setEditPermissions(prev => ({ ...prev, [key]: v }))}
-                    />
-                  </div>
-                ))}
-              </div>
+              <PermissionsGrid value={editPermissions} onChange={setEditPermissions} />
             </div>
           </div>
           <DialogFooter className="gap-2 mt-2">

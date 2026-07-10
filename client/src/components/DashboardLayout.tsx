@@ -38,17 +38,17 @@ import { Plus } from "lucide-react";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "لوحة التحكم", path: "/" },
-  { icon: Car, label: "السيارات", path: "/vehicles" },
-  { icon: MapPin, label: "تتبع السيارات", path: "/tracking" },
-  { icon: Users, label: "العملاء", path: "/customers" },
-  { icon: CalendarCheck, label: "الحجوزات", path: "/reservations" },
-  { icon: FileText, label: "العقود", path: "/contracts" },
-  { icon: CreditCard, label: "المدفوعات", path: "/payments" },
-  { icon: ArrowLeftRight, label: "النقل", path: "/transfers" },
-  { icon: Wrench, label: "الصيانة", path: "/maintenance" },
-  { icon: BarChart3, label: "التقارير", path: "/reports" },
-  { icon: Bell, label: "التنبيهات", path: "/alerts" },
+  { icon: LayoutDashboard, label: "لوحة التحكم", path: "/", permission: "view_dashboard" },
+  { icon: Car, label: "السيارات", path: "/vehicles", permission: "view_vehicles" },
+  { icon: MapPin, label: "تتبع السيارات", path: "/tracking", permission: "view_tracking" },
+  { icon: Users, label: "العملاء", path: "/customers", permission: "view_customers" },
+  { icon: CalendarCheck, label: "الحجوزات", path: "/reservations", permission: "view_reservations" },
+  { icon: FileText, label: "العقود", path: "/contracts", permission: "view_contracts" },
+  { icon: CreditCard, label: "المدفوعات", path: "/payments", permission: "view_payments" },
+  { icon: ArrowLeftRight, label: "النقل", path: "/transfers", permission: "view_transfers" },
+  { icon: Wrench, label: "الصيانة", path: "/maintenance", permission: "view_maintenance" },
+  { icon: BarChart3, label: "التقارير", path: "/reports", permission: "view_reports" },
+  { icon: Bell, label: "التنبيهات", path: "/alerts", permission: "view_alerts" },
   { icon: UserCog, label: "إدارة الموظفين", path: "/staff", ownerOnly: true },
   { icon: ClipboardList, label: "سجل التدقيق", path: "/audit-log", ownerOnly: true },
   { icon: Settings, label: "الإعدادات", path: "/settings" },
@@ -124,6 +124,9 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const unreadCount = alertsData?.length ?? 0;
   const [quickContractOpen, setQuickContractOpen] = useState(false);
   const { canInstall, promptInstall } = useInstallPrompt();
+  const { data: myPermissions } = trpc.office.myPermissions.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);
@@ -175,7 +178,13 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
 
           <SidebarContent className="gap-0 py-2">
             <SidebarMenu className="px-2">
-              {menuItems.filter(item => !item.ownerOnly || user?.role === 'owner').map(item => {
+              {menuItems.filter(item => {
+                if ((item as any).ownerOnly) return user?.role === 'owner';
+                const perm = (item as any).permission as string | undefined;
+                // Until permissions load (or for keyless items), show the item.
+                if (!perm || !myPermissions) return true;
+                return myPermissions[perm] !== false;
+              }).map(item => {
                 const isActive = location === item.path || (item.path !== "/" && location.startsWith(item.path));
                 return (
                   <SidebarMenuItem key={item.path}>

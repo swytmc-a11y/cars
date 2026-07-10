@@ -145,6 +145,82 @@ export function buildContractHtml(contract: Contract, customer: Customer | undef
 </html>`;
 }
 
+export interface ReportTable {
+  title?: string;
+  headers: string[];
+  rows: (string | number)[][];
+}
+
+export interface ReportOptions {
+  title: string;
+  subtitle?: string;
+  officeName?: string;
+  summary?: { label: string; value: string }[];
+  tables: ReportTable[];
+}
+
+export function buildReportHtml(opts: ReportOptions): string {
+  const summaryHtml = opts.summary?.length
+    ? `<div class="summary">${opts.summary
+        .map(s => `<div class="summary-item"><div class="summary-label">${s.label}</div><div class="summary-value">${s.value}</div></div>`)
+        .join("")}</div>`
+    : "";
+
+  const tablesHtml = opts.tables
+    .map(
+      table => `
+  ${table.title ? `<div class="section-title">${table.title}</div>` : ""}
+  <table>
+    <thead><tr>${table.headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+    <tbody>
+      ${table.rows.length === 0
+        ? `<tr><td colspan="${table.headers.length}" class="empty">لا توجد بيانات</td></tr>`
+        : table.rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join("")}</tr>`).join("")}
+    </tbody>
+  </table>`,
+    )
+    .join("");
+
+  return `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>${opts.title}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap');
+    ${baseStyles}
+    .header { text-align: center; margin-bottom: 25px; border-bottom: 3px solid #2563eb; padding-bottom: 15px; }
+    .header h1 { font-size: 22px; color: #2563eb; margin-bottom: 4px; }
+    .header p { color: #666; font-size: 13px; }
+    .meta { text-align: center; color: #999; font-size: 11px; margin-bottom: 20px; }
+    .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 25px; }
+    .summary-item { flex: 1; min-width: 120px; background: #f0f4ff; border-radius: 10px; padding: 12px; text-align: center; }
+    .summary-label { font-size: 11px; color: #6b7280; margin-bottom: 4px; }
+    .summary-value { font-size: 16px; font-weight: 700; color: #2563eb; }
+    .section-title { font-size: 15px; font-weight: 700; color: #2563eb; margin: 20px 0 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { background: #2563eb; color: white; padding: 8px 10px; text-align: right; font-weight: 600; }
+    td { padding: 7px 10px; border-bottom: 1px solid #e5e7eb; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    .empty { text-align: center; color: #999; padding: 20px; }
+    .footer { text-align: center; margin-top: 30px; color: #999; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${opts.title}</h1>
+    ${opts.subtitle ? `<p>${opts.subtitle}</p>` : ""}
+    ${opts.officeName ? `<p>${opts.officeName}</p>` : ""}
+  </div>
+  <div class="meta">تاريخ الإصدار: ${new Date().toLocaleDateString("ar-SA")} - ${new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}</div>
+  ${summaryHtml}
+  ${tablesHtml}
+  <div class="footer">تم إنشاء هذا التقرير آلياً من نظام إدارة التأجير</div>
+</body>
+</html>`;
+}
+
 export function buildReceiptHtml(payment: Payment, contract: Contract | undefined, customer: Customer | undefined): string {
   return `
 <!DOCTYPE html>
