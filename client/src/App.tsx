@@ -36,6 +36,7 @@ import PendingApprovalPage from "./pages/Auth/PendingApprovalPage";
 import ForgotPasswordPage from "./pages/Auth/ForgotPasswordPage";
 import AcceptInvitePage from "./pages/Auth/AcceptInvitePage";
 import StaffManagementPage from "./pages/Staff/StaffManagementPage";
+import LiveMapPage from "./pages/Tracking/LiveMapPage";
 
 function DashboardRouter() {
   return (
@@ -46,6 +47,7 @@ function DashboardRouter() {
         <Route path="/vehicles/new" component={VehicleForm} />
         <Route path="/vehicles/:id" component={VehicleDetail} />
         <Route path="/vehicles/:id/edit" component={VehicleForm} />
+        <Route path="/tracking" component={LiveMapPage} />
         <Route path="/customers" component={CustomersList} />
         <Route path="/customers/new" component={CustomerForm} />
         <Route path="/customers/:id/profile" component={CustomerProfile} />

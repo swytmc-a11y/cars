@@ -43,6 +43,13 @@
       "when": 1783570000087,
       "tag": "0005_furry_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1783693843939,
+      "tag": "0006_nosy_fixer",
+      "breakpoints": true
     }
   ]
 }

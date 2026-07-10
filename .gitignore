@@ -7,6 +7,9 @@ dist/
 build/
 *.dist
 
+# Local storage fallback (used when Forge/S3 isn't configured)
+/uploads/
+
 # Environment variables
 .env
 .env.local

@@ -24,7 +24,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, Car, Users, CalendarCheck, FileText,
   ArrowLeftRight, Wrench, CreditCard, Bell, Settings,
-  BarChart3, LogOut, PanelRight, ClipboardList, UserCircle, UserCog,
+  BarChart3, LogOut, PanelRight, ClipboardList, UserCircle, UserCog, MapPin, Download,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -35,10 +35,12 @@ import { Badge } from "./ui/badge";
 import GlobalSearch from "./GlobalSearch";
 import QuickContractDialog from "./QuickContractDialog";
 import { Plus } from "lucide-react";
+import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "لوحة التحكم", path: "/" },
   { icon: Car, label: "السيارات", path: "/vehicles" },
+  { icon: MapPin, label: "تتبع السيارات", path: "/tracking" },
   { icon: Users, label: "العملاء", path: "/customers" },
   { icon: CalendarCheck, label: "الحجوزات", path: "/reservations" },
   { icon: FileText, label: "العقود", path: "/contracts" },
@@ -121,6 +123,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   });
   const unreadCount = alertsData?.length ?? 0;
   const [quickContractOpen, setQuickContractOpen] = useState(false);
+  const { canInstall, promptInstall } = useInstallPrompt();
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);
@@ -196,7 +199,13 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
             </SidebarMenu>
           </SidebarContent>
 
-          <SidebarFooter className="p-3 border-t">
+          <SidebarFooter className="p-3 border-t space-y-2">
+            {canInstall && (
+              <Button variant="outline" size="sm" className="w-full gap-2 group-data-[collapsible=icon]:hidden" onClick={promptInstall}>
+                <Download className="h-4 w-4" />
+                تثبيت التطبيق
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-right group-data-[collapsible=icon]:justify-center focus:outline-none">

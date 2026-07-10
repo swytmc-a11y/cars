@@ -9,6 +9,8 @@ import * as db from "./db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { sendOtpEmail, sendInvitationEmail } from "./email";
+import { renderHtmlToPdf, buildContractHtml, buildReceiptHtml } from "./pdf";
+import { storagePut } from "./storage";
 
 // ==================== ROUTERS ====================
 export const appRouter = router({
@@ -339,6 +341,19 @@ export const appRouter = router({
       const totalPaid = await db.getTotalPaymentsByContract(input.id);
       return { contract, payments: contractPayments, handover, return: returnRecord, totalPaid };
     }),
+    generatePdf: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      const contract = await db.getContractById(input.id);
+      if (!contract) throw new TRPCError({ code: 'NOT_FOUND', message: 'العقد غير موجود' });
+      const [customer, vehicle] = await Promise.all([
+        db.getCustomerById(contract.customerId),
+        db.getVehicleById(contract.vehicleId),
+      ]);
+      const html = buildContractHtml(contract, customer, vehicle);
+      const pdf = await renderHtmlToPdf(html);
+      const { url } = await storagePut(`contracts/${contract.id}/contract.pdf`, pdf, 'application/pdf');
+      await db.updateContract(input.id, { pdfUrl: url });
+      return { url };
+    }),
     create: protectedProcedure.input(z.object({
       customerId: z.number(),
       vehicleId: z.number(),
@@ -491,6 +506,17 @@ export const appRouter = router({
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'payment', entityId: id, newValue: input });
       return { id };
     }),
+    generatePdf: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      const payment = await db.getPaymentById(input.id);
+      if (!payment) throw new TRPCError({ code: 'NOT_FOUND', message: 'الدفعة غير موجودة' });
+      const contract = await db.getContractById(payment.contractId);
+      const customer = contract ? await db.getCustomerById(contract.customerId) : undefined;
+      const html = buildReceiptHtml(payment, contract, customer);
+      const pdf = await renderHtmlToPdf(html);
+      const { url } = await storagePut(`payments/${payment.id}/receipt.pdf`, pdf, 'application/pdf');
+      await db.updatePayment(input.id, { pdfUrl: url });
+      return { url };
+    }),
   }),
 
   // ==================== TRANSFERS ====================
@@ -592,6 +618,49 @@ export const appRouter = router({
       } as any);
       await db.createAuditLog({ userId: ctx.user.id, action: 'create', entityType: 'vehicleDocument', entityId: id, newValue: input });
       return { id };
+    }),
+  }),
+
+  // ==================== VEHICLE TRACKING (GPS) ====================
+  // Provider-agnostic ingestion: pings can come from a manual entry, a
+  // driver-facing PWA page, or a future real telematics/OBD provider.
+  vehicleTracking: router({
+    ingest: protectedProcedure.input(z.object({
+      vehicleId: z.number(),
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      speed: z.number().optional(),
+      heading: z.number().min(0).max(359).optional(),
+      source: z.enum(['manual', 'driver_app', 'device']).default('manual'),
+      recordedAt: z.string().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      const id = await db.ingestVehicleLocation({
+        officeId,
+        vehicleId: input.vehicleId,
+        lat: String(input.lat),
+        lng: String(input.lng),
+        speed: input.speed !== undefined ? String(input.speed) : undefined,
+        heading: input.heading,
+        source: input.source,
+        recordedAt: input.recordedAt ? new Date(input.recordedAt) : new Date(),
+      });
+      return { id };
+    }),
+    latest: protectedProcedure.query(async ({ ctx }) => {
+      const officeId = (ctx.user as any).officeId;
+      return db.getLatestVehicleLocations(officeId);
+    }),
+    history: protectedProcedure.input(z.object({
+      vehicleId: z.number(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    })).query(async ({ input }) => {
+      return db.getVehicleLocationHistory(
+        input.vehicleId,
+        input.from ? new Date(input.from) : undefined,
+        input.to ? new Date(input.to) : undefined,
+      );
     }),
   }),
 

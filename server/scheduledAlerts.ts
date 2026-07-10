@@ -17,8 +17,11 @@ import {
   customers,
   alerts,
   branches,
+  vehicleLocations,
 } from "../drizzle/schema";
-import { and, eq, lte, gte, sql } from "drizzle-orm";
+import { and, eq, lte, gte, sql, desc, inArray } from "drizzle-orm";
+
+const STALE_TRACKING_HOURS = 6;
 
 export async function dailyAlertsHandler(req: Request, res: Response) {
   try {
@@ -169,6 +172,56 @@ export async function dailyAlertsHandler(req: Request, res: Response) {
       });
 
       alertsCreated.push(`overdue:${contract.contractId}`);
+    }
+
+    // ─── 3. Check stale GPS tracking on rented vehicles ────────────────────
+    const rentedVehicles = await db
+      .select({ id: vehicles.id, plateNumber: vehicles.plateNumber, brand: vehicles.brand, model: vehicles.model, officeId: vehicles.officeId, branchId: vehicles.branchId })
+      .from(vehicles)
+      .where(and(eq(vehicles.status, "rented"), eq(vehicles.isActive, true)));
+
+    if (rentedVehicles.length > 0) {
+      const staleThreshold = new Date(now.getTime() - STALE_TRACKING_HOURS * 60 * 60 * 1000);
+      const rentedIds = rentedVehicles.map(v => v.id);
+      const recentPings = await db
+        .select({ vehicleId: vehicleLocations.vehicleId, recordedAt: vehicleLocations.recordedAt })
+        .from(vehicleLocations)
+        .where(and(inArray(vehicleLocations.vehicleId, rentedIds), gte(vehicleLocations.recordedAt, staleThreshold)));
+      const trackedIds = new Set(recentPings.map(p => p.vehicleId));
+
+      for (const vehicle of rentedVehicles) {
+        if (trackedIds.has(vehicle.id)) continue;
+        const vehicleName = `${vehicle.brand} ${vehicle.model} (${vehicle.plateNumber})`;
+        const message = `لا توجد بيانات موقع حديثة للسيارة ${vehicleName} منذ أكثر من ${STALE_TRACKING_HOURS} ساعات`;
+
+        const existingStaleAlert = await db
+          .select({ id: alerts.id })
+          .from(alerts)
+          .where(
+            and(
+              eq(alerts.relatedEntity, "vehicle"),
+              eq(alerts.relatedId, vehicle.id),
+              sql`DATE(${alerts.createdAt}) = ${todayStr}`,
+              eq(alerts.title, "انقطاع تتبع السيارة")
+            )
+          )
+          .limit(1);
+
+        if (existingStaleAlert.length > 0) continue;
+
+        await db.insert(alerts).values({
+          officeId: vehicle.officeId,
+          branchId: vehicle.branchId ?? null,
+          type: "warning",
+          title: "انقطاع تتبع السيارة",
+          message,
+          relatedEntity: "vehicle",
+          relatedId: vehicle.id,
+          isRead: false,
+        });
+
+        alertsCreated.push(`stale-tracking:${vehicle.id}`);
+      }
     }
 
     return res.json({

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+import { VitePWA } from "vite-plugin-pwa";
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -150,7 +151,53 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+const pwaPlugin = VitePWA({
+  registerType: "autoUpdate",
+  includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
+  manifest: {
+    id: "/",
+    name: "نظام إدارة تأجير السيارات",
+    short_name: "تأجير السيارات",
+    description: "نظام متكامل لإدارة تأجير السيارات: العقود، الأسطول، العملاء، والتقارير",
+    lang: "ar",
+    dir: "rtl",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#ffffff",
+    theme_color: "#2563eb",
+    icons: [
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+    ],
+  },
+  workbox: {
+    // Precache only the built static app shell (JS/CSS/fonts/icons). Every
+    // /api/* call (tRPC + auth) must always hit the network live — this is a
+    // multi-tenant operational dashboard where cached vehicle/reservation/GPS
+    // data would cause real errors (e.g. renting an already-rented car).
+    globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+    navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+    runtimeCaching: [
+      {
+        urlPattern: /^\/api\//,
+        handler: "NetworkOnly",
+      },
+      {
+        urlPattern: /^\/uploads\//,
+        handler: "NetworkOnly",
+      },
+    ],
+  },
+  // Service worker only activates in production builds. In `pnpm dev` the
+  // dev-mode SW proxies every request through Vite's dev server, which can
+  // stall client-side navigation — not worth the instability for a
+  // dev-only concern. Verify PWA behavior via `pnpm build` + a static preview.
+  devOptions: {
+    enabled: false,
+  },
+});
+
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), pwaPlugin];
 
 export default defineConfig({
   plugins,

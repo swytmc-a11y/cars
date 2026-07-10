@@ -252,6 +252,7 @@ export const payments = mysqlTable("payments", {
   paidAt: timestamp("paidAt").defaultNow().notNull(),
   recordedBy: int("recordedBy"),
   notes: text("notes"),
+  pdfUrl: text("pdfUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -328,6 +329,26 @@ export const vehicleHistory = mysqlTable("vehicle_history", {
 
 export type VehicleHistory = typeof vehicleHistory.$inferSelect;
 export type InsertVehicleHistory = typeof vehicleHistory.$inferInsert;
+
+// ==================== VEHICLE LOCATIONS (GPS tracking) ====================
+// Provider-agnostic: `source` records where a ping came from (manual entry,
+// driver-facing PWA geolocation, or a future real telematics/OBD provider)
+// so the ingestion endpoint can plug into any of them without schema changes.
+export const vehicleLocations = mysqlTable("vehicle_locations", {
+  id: int("id").autoincrement().primaryKey(),
+  officeId: int("officeId").notNull(),
+  vehicleId: int("vehicleId").notNull(),
+  lat: decimal("lat", { precision: 10, scale: 7 }).notNull(),
+  lng: decimal("lng", { precision: 11, scale: 7 }).notNull(),
+  speed: decimal("speed", { precision: 6, scale: 2 }),
+  heading: int("heading"),
+  source: varchar("source", { length: 50 }).default("manual").notNull(),
+  recordedAt: timestamp("recordedAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VehicleLocation = typeof vehicleLocations.$inferSelect;
+export type InsertVehicleLocation = typeof vehicleLocations.$inferInsert;
 
 // ==================== AUDIT LOG ====================
 export const auditLogs = mysqlTable("audit_logs", {

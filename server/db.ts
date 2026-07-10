@@ -17,6 +17,7 @@ import {
   maintenance, InsertMaintenance,
   vehicleDocuments, InsertVehicleDocument,
   vehicleHistory, InsertVehicleHistory,
+  vehicleLocations, InsertVehicleLocation,
   auditLogs, InsertAuditLog,
   alerts, InsertAlert,
 } from "../drizzle/schema";
@@ -414,6 +415,19 @@ export async function createPayment(data: InsertPayment) {
   return result[0].insertId;
 }
 
+export async function getPaymentById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updatePayment(id: number, data: Partial<InsertPayment>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(payments).set(data).where(eq(payments.id, id));
+}
+
 export async function getTotalPaymentsByContract(contractId: number) {
   const db = await getDb();
   if (!db) return 0;
@@ -496,6 +510,42 @@ export async function addVehicleHistory(data: InsertVehicleHistory) {
   const db = await getDb();
   if (!db) return;
   await db.insert(vehicleHistory).values(data);
+}
+
+// ==================== VEHICLE LOCATIONS (GPS tracking) ====================
+export async function ingestVehicleLocation(data: InsertVehicleLocation) {
+  const db = await getDb();
+  if (!db) return;
+  const result = await db.insert(vehicleLocations).values(data);
+  return result[0].insertId;
+}
+
+export async function getLatestVehicleLocations(officeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(vehicleLocations)
+    .where(eq(vehicleLocations.officeId, officeId))
+    .orderBy(desc(vehicleLocations.recordedAt));
+  const latestByVehicle = new Map<number, typeof rows[number]>();
+  for (const row of rows) {
+    if (!latestByVehicle.has(row.vehicleId)) latestByVehicle.set(row.vehicleId, row);
+  }
+  return Array.from(latestByVehicle.values());
+}
+
+export async function getVehicleLocationHistory(vehicleId: number, from?: Date, to?: Date) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(vehicleLocations.vehicleId, vehicleId)];
+  if (from) conditions.push(gte(vehicleLocations.recordedAt, from));
+  if (to) conditions.push(lte(vehicleLocations.recordedAt, to));
+  return db
+    .select()
+    .from(vehicleLocations)
+    .where(and(...conditions))
+    .orderBy(desc(vehicleLocations.recordedAt));
 }
 
 // ==================== AUDIT LOG ====================
