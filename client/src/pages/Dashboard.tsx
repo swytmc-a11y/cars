@@ -39,15 +39,31 @@ export default function Dashboard() {
     );
   }
 
-  const statCards = [
-    { title: "إجمالي السيارات", value: stats?.totalVehicles ?? 0, icon: Car, color: "text-primary", bg: "bg-primary/10", href: "/vehicles" },
-    { title: "متاحة للإيجار", value: stats?.available ?? 0, icon: Car, color: "text-green-600", bg: "bg-green-50", href: "/vehicles" },
-    { title: "عقود نشطة", value: stats?.activeContracts ?? 0, icon: FileText, color: "text-blue-600", bg: "bg-blue-50", href: "/contracts" },
-    { title: "نسبة الإشغال", value: `${stats?.occupancyRate ?? 0}%`, icon: TrendingUp, color: "text-primary", bg: "bg-primary/10", href: "/reports" },
-    { title: "في الصيانة", value: stats?.inMaintenance ?? 0, icon: Wrench, color: "text-amber-600", bg: "bg-amber-50", href: "/maintenance" },
-    { title: "متأخرة الإرجاع", value: stats?.late ?? 0, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50", href: "/contracts" },
-    { title: "قيد النقل", value: stats?.inTransfer ?? 0, icon: ArrowLeftRight, color: "text-purple-600", bg: "bg-purple-50", href: "/transfers" },
-    { title: "تنبيهات غير مقروءة", value: alerts.length, icon: Bell, color: "text-red-600", bg: "bg-red-50", href: "/alerts" },
+  // Grouped for hierarchy: fleet status → revenue/contracts → operational flags
+  const statGroups = [
+    {
+      label: "الأسطول",
+      cards: [
+        { title: "إجمالي السيارات", value: stats?.totalVehicles ?? 0, icon: Car, color: "text-primary", bg: "bg-primary/10", href: "/vehicles" },
+        { title: "متاحة للإيجار", value: stats?.available ?? 0, icon: Car, color: "text-emerald-600", bg: "bg-emerald-50", href: "/vehicles" },
+        { title: "في الصيانة", value: stats?.inMaintenance ?? 0, icon: Wrench, color: "text-amber-600", bg: "bg-amber-50", href: "/maintenance" },
+        { title: "قيد النقل", value: stats?.inTransfer ?? 0, icon: ArrowLeftRight, color: "text-purple-600", bg: "bg-purple-50", href: "/transfers" },
+      ],
+    },
+    {
+      label: "الإيرادات والعقود",
+      cards: [
+        { title: "عقود نشطة", value: stats?.activeContracts ?? 0, icon: FileText, color: "text-primary", bg: "bg-primary/10", href: "/contracts" },
+        { title: "نسبة الإشغال", value: `${stats?.occupancyRate ?? 0}%`, icon: TrendingUp, color: "text-primary", bg: "bg-primary/10", href: "/reports" },
+      ],
+    },
+    {
+      label: "يحتاج انتباهك",
+      cards: [
+        { title: "متأخرة الإرجاع", value: stats?.late ?? 0, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50", href: "/contracts" },
+        { title: "تنبيهات غير مقروءة", value: alerts.length, icon: Bell, color: "text-red-600", bg: "bg-red-50", href: "/alerts" },
+      ],
+    },
   ];
 
   // Prepare fleet pie chart data
@@ -68,39 +84,49 @@ export default function Dashboard() {
   const totalRevenue = revenueData.reduce((sum: number, d: { الإيرادات: number }) => sum + d.الإيرادات, 0);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">لوحة التحكم</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">لوحة التحكم</h1>
           <p className="text-muted-foreground text-sm mt-1">نظرة عامة على أداء الأسطول</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-2.5 shadow-soft-sm">
+          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <DollarSign className="h-4 w-4 text-primary" />
+          </div>
           <div className="text-left">
             <p className="text-xs text-muted-foreground">إيرادات هذا الشهر</p>
-            <p className="text-lg font-bold text-primary">
+            <p className="text-lg font-semibold text-primary tabular-nums">
               {(stats?.monthlyRevenue ?? 0).toLocaleString("ar-SA")} ر.س
             </p>
           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((card) => (
-          <Link key={card.title} href={card.href}>
-            <Card className="hover:shadow-md transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99]">
-              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">{card.title}</CardTitle>
-                <div className={`w-8 h-8 rounded-lg ${card.bg} flex items-center justify-center flex-shrink-0`}>
-                  <card.icon className={`h-4 w-4 ${card.color}`} />
-                </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="text-2xl font-bold">{card.value}</div>
-              </CardContent>
-            </Card>
-          </Link>
+      {/* Stats Groups — grouped by theme for clearer hierarchy */}
+      <div className="space-y-6">
+        {statGroups.map((group) => (
+          <div key={group.label} className="space-y-3">
+            <h2 className="text-xs font-medium text-muted-foreground px-0.5">{group.label}</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {group.cards.map((card) => (
+                <Link key={card.title} href={card.href}>
+                  <Card className="hover:shadow-soft-md transition-all cursor-pointer hover:-translate-y-0.5 active:translate-y-0">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+                      <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">{card.title}</CardTitle>
+                      <div className={`w-9 h-9 rounded-xl ${card.bg} flex items-center justify-center flex-shrink-0`}>
+                        <card.icon className={`h-4 w-4 ${card.color}`} strokeWidth={1.75} />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4">
+                      <div className="text-2xl font-semibold tabular-nums">{card.value}</div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 

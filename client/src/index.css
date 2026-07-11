@@ -51,39 +51,45 @@
 }
 
 :root {
-  --primary: oklch(0.45 0.2 255);
+  /* Deep indigo primary — Stripe/Linear-style "trust + control" tone */
+  --primary: oklch(0.4 0.17 264);
   --primary-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.45 0.2 255);
+  --sidebar-primary: oklch(0.4 0.17 264);
   --sidebar-primary-foreground: oklch(0.98 0 0);
   --chart-1: oklch(0.65 0.2 145);
-  --chart-2: oklch(0.55 0.2 255);
+  --chart-2: oklch(0.4 0.17 264);
   --chart-3: oklch(0.6 0.2 55);
   --chart-4: oklch(0.55 0.25 25);
   --chart-5: oklch(0.55 0.2 295);
-  --radius: 0.625rem;
-  --background: oklch(0.98 0.002 250);
-  --foreground: oklch(0.2 0.02 260);
+  /* 12px card radius per design system spec (buttons derive to ~10px via --radius-md) */
+  --radius: 0.75rem;
+  --background: oklch(0.975 0.003 260);
+  --foreground: oklch(0.18 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 260);
+  --card-foreground: oklch(0.18 0.02 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 260);
-  --secondary: oklch(0.96 0.005 250);
-  --secondary-foreground: oklch(0.35 0.02 260);
-  --muted: oklch(0.96 0.005 250);
-  --muted-foreground: oklch(0.5 0.02 260);
-  --accent: oklch(0.94 0.01 250);
-  --accent-foreground: oklch(0.2 0.02 260);
-  --destructive: oklch(0.55 0.25 25);
+  --popover-foreground: oklch(0.18 0.02 260);
+  --secondary: oklch(0.955 0.005 260);
+  --secondary-foreground: oklch(0.32 0.02 260);
+  --muted: oklch(0.955 0.005 260);
+  --muted-foreground: oklch(0.52 0.015 260);
+  --accent: oklch(0.93 0.012 260);
+  --accent-foreground: oklch(0.18 0.02 260);
+  --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.91 0.005 250);
-  --input: oklch(0.91 0.005 250);
-  --ring: oklch(0.45 0.2 255);
-  --sidebar: oklch(0.985 0.002 250);
-  --sidebar-foreground: oklch(0.2 0.02 260);
-  --sidebar-accent: oklch(0.94 0.01 250);
-  --sidebar-accent-foreground: oklch(0.2 0.02 260);
-  --sidebar-border: oklch(0.91 0.005 250);
-  --sidebar-ring: oklch(0.45 0.2 255);
+  --border: oklch(0.9 0.006 260);
+  --input: oklch(0.9 0.006 260);
+  --ring: oklch(0.4 0.17 264);
+  --sidebar: oklch(0.98 0.003 260);
+  --sidebar-foreground: oklch(0.18 0.02 260);
+  --sidebar-accent: oklch(0.93 0.012 260);
+  --sidebar-accent-foreground: oklch(0.18 0.02 260);
+  --sidebar-border: oklch(0.9 0.006 260);
+  --sidebar-ring: oklch(0.4 0.17 264);
+  /* Soft layered shadow tokens (subtle, not harsh) */
+  --shadow-soft-sm: 0 1px 2px oklch(0.2 0.02 260 / 0.04), 0 1px 1px oklch(0.2 0.02 260 / 0.03);
+  --shadow-soft-md: 0 2px 8px oklch(0.2 0.02 260 / 0.06), 0 1px 2px oklch(0.2 0.02 260 / 0.04);
+  --shadow-soft-lg: 0 8px 24px oklch(0.2 0.02 260 / 0.08), 0 2px 6px oklch(0.2 0.02 260 / 0.04);
 }
 
 @layer base {
@@ -136,6 +142,11 @@
       max-width: 1280px;
     }
   }
+
+  /* Soft layered shadow utilities (design system tokens above) */
+  .shadow-soft-sm { box-shadow: var(--shadow-soft-sm); }
+  .shadow-soft-md { box-shadow: var(--shadow-soft-md); }
+  .shadow-soft-lg { box-shadow: var(--shadow-soft-lg); }
 
   /* Status badges */
   .status-available { background-color: oklch(0.92 0.1 145); color: oklch(0.35 0.15 145); }
