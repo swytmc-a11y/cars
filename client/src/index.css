@@ -1,0 +1,158 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  /* Status colors */
+  --color-status-available: oklch(0.65 0.2 145);
+  --color-status-rented: oklch(0.55 0.2 255);
+  --color-status-maintenance: oklch(0.6 0.2 55);
+  --color-status-late: oklch(0.55 0.25 25);
+  --color-status-transfer: oklch(0.55 0.2 295);
+  --color-status-reserved: oklch(0.6 0.15 220);
+}
+
+:root {
+  /* Deep indigo primary — Stripe/Linear-style "trust + control" tone */
+  --primary: oklch(0.4 0.17 264);
+  --primary-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.4 0.17 264);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --chart-1: oklch(0.65 0.2 145);
+  --chart-2: oklch(0.4 0.17 264);
+  --chart-3: oklch(0.6 0.2 55);
+  --chart-4: oklch(0.55 0.25 25);
+  --chart-5: oklch(0.55 0.2 295);
+  /* 12px card radius per design system spec (buttons derive to ~10px via --radius-md) */
+  --radius: 0.75rem;
+  --background: oklch(0.975 0.003 260);
+  --foreground: oklch(0.18 0.02 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 260);
+  --secondary: oklch(0.955 0.005 260);
+  --secondary-foreground: oklch(0.32 0.02 260);
+  --muted: oklch(0.955 0.005 260);
+  --muted-foreground: oklch(0.52 0.015 260);
+  --accent: oklch(0.93 0.012 260);
+  --accent-foreground: oklch(0.18 0.02 260);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.9 0.006 260);
+  --input: oklch(0.9 0.006 260);
+  --ring: oklch(0.4 0.17 264);
+  --sidebar: oklch(0.98 0.003 260);
+  --sidebar-foreground: oklch(0.18 0.02 260);
+  --sidebar-accent: oklch(0.93 0.012 260);
+  --sidebar-accent-foreground: oklch(0.18 0.02 260);
+  --sidebar-border: oklch(0.9 0.006 260);
+  --sidebar-ring: oklch(0.4 0.17 264);
+  /* Soft layered shadow tokens (subtle, not harsh) */
+  --shadow-soft-sm: 0 1px 2px oklch(0.2 0.02 260 / 0.04), 0 1px 1px oklch(0.2 0.02 260 / 0.03);
+  --shadow-soft-md: 0 2px 8px oklch(0.2 0.02 260 / 0.06), 0 1px 2px oklch(0.2 0.02 260 / 0.04);
+  --shadow-soft-lg: 0 8px 24px oklch(0.2 0.02 260 / 0.08), 0 2px 6px oklch(0.2 0.02 260 / 0.04);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "tnum";
+    direction: rtl;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+      max-width: 1280px;
+    }
+  }
+
+  /* Soft layered shadow utilities (design system tokens above) */
+  .shadow-soft-sm { box-shadow: var(--shadow-soft-sm); }
+  .shadow-soft-md { box-shadow: var(--shadow-soft-md); }
+  .shadow-soft-lg { box-shadow: var(--shadow-soft-lg); }
+
+  /* Status badges */
+  .status-available { background-color: oklch(0.92 0.1 145); color: oklch(0.35 0.15 145); }
+  .status-rented { background-color: oklch(0.92 0.08 255); color: oklch(0.35 0.15 255); }
+  .status-maintenance { background-color: oklch(0.92 0.08 55); color: oklch(0.4 0.15 55); }
+  .status-late { background-color: oklch(0.92 0.1 25); color: oklch(0.4 0.2 25); }
+  .status-transfer { background-color: oklch(0.92 0.08 295); color: oklch(0.4 0.15 295); }
+  .status-reserved { background-color: oklch(0.92 0.06 220); color: oklch(0.4 0.12 220); }
+}
