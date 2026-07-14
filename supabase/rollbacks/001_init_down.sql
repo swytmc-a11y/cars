@@ -1,0 +1,1 @@
+drop table if exists audit_logs,notifications,family_members,families,savings_goals,transactions,wallets,allocations,salary_plans,profiles cascade; drop type if exists family_role,transaction_type,distribution_frequency cascade;

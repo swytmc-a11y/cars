@@ -1,0 +1,2 @@
+import { supabase } from '../utils/supabase.js';
+export class BaseRepository<T extends {id:string}>{ constructor(private table:string){} async list(userId:string){ const {data,error}=await supabase.from(this.table).select('*').eq('user_id',userId).order('created_at',{ascending:false}); if(error) throw error; return data as T[];} async create(row:Partial<T>){ const {data,error}=await supabase.from(this.table).insert(row).select('*').single(); if(error) throw error; return data as T;} }

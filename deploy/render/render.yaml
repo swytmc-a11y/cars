@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: sawn-api
+    env: docker
+    dockerfilePath: services/api/Dockerfile
+    healthCheckPath: /api/v1/health
