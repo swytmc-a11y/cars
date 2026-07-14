@@ -1,0 +1,1 @@
+export const openapi={openapi:'3.0.3',info:{title:'Sawn API',version:'1.0.0'},paths:{'/api/v1/health':{get:{responses:{'200':{description:'OK'}}}},'/api/v1/assistant/insights':{post:{security:[{bearerAuth:[]}],responses:{'200':{description:'AI financial recommendations'}}}}},components:{securitySchemes:{bearerAuth:{type:'http',scheme:'bearer',bearerFormat:'JWT'}}}};

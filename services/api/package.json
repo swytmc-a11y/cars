@@ -1,0 +1,42 @@
+{
+  "name": "sawn-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "latest",
+    "bullmq": "latest",
+    "compression": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "^5.0.0",
+    "express-rate-limit": "latest",
+    "helmet": "latest",
+    "ioredis": "latest",
+    "jsonwebtoken": "latest",
+    "swagger-ui-express": "latest",
+    "winston": "latest",
+    "zod": "latest",
+    "firebase-admin": "latest",
+    "bcryptjs": "latest"
+  },
+  "devDependencies": {
+    "@types/compression": "latest",
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/jsonwebtoken": "latest",
+    "@types/node": "latest",
+    "@types/swagger-ui-express": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest",
+    "supertest": "latest",
+    "@types/supertest": "latest"
+  }
+}
