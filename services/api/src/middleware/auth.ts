@@ -1,0 +1,3 @@
+import { Request, Response, NextFunction } from 'express'; import jwt from 'jsonwebtoken'; import { config } from '../config.js';
+declare global { namespace Express { interface Request { user?: { id:string; email?:string } } } }
+export function requireAuth(req:Request,res:Response,next:NextFunction){ const h=req.headers.authorization; if(!h?.startsWith('Bearer ')) return res.status(401).json({error:{code:'UNAUTHENTICATED',message:'Missing bearer token'}}); try{ req.user=jwt.verify(h.slice(7),config.JWT_SECRET) as any; next(); }catch{return res.status(401).json({error:{code:'INVALID_TOKEN',message:'Invalid token'}})} }
