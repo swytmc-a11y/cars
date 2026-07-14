@@ -8,6 +8,7 @@
 - `services/api`: Node.js 20 + Express 5 + TypeScript API using Supabase, Redis, BullMQ, Zod, Winston, Swagger, JWT middleware, and centralized errors.
 - `supabase`: PostgreSQL schema, RLS policies, triggers, indexes, audit logging, seed data, and rollback migration.
 - `deploy`: Railway and Render definitions.
+- `scripts/ci.sh`: non-GitHub CI entrypoint for local, self-hosted, GitLab, Jenkins, Bitbucket, Railway, Render, or private runners.
 
 ## Quick start
 
@@ -16,6 +17,8 @@ cp services/api/.env.example services/api/.env
 cp apps/mobile/.env.example apps/mobile/.env
 docker compose up --build
 ```
+
+This project is standalone and does not require a GitHub repository. Run `./scripts/ci.sh` or `make ci` for CI checks on any runner.
 
 API: http://localhost:8080/api/v1/health
 Swagger: http://localhost:8080/docs
